@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# models, weights, caches, served replicas and run outputs stay local
+/models/
+/weights/
+/cache/
+/serve/
+/runs/
+
+# datasets (manifests and PNG slice folders) are never committed
+/data/**
+!/data/*/
+!/data/*/.gitkeep

@@ -1,0 +1,20 @@
+# Generator profile: Qwen3-VL-32B-Instruct. 67 GB of bf16 weights: TP=2 is the serving unit,
+# one replica per pair of cards in serve.gpus (e.g. [0, 1, 2, 3] for two replicas).
+# A PRM is trained on the pools of one G: scoring this G's candidates with a PRM trained on
+# another G's pools is a cross-generator shift, report it as such.
+# Every generator profile sets the same keys, so stacking a profile on top of base.yaml
+# replaces the default one completely. serve.* is operational (in no stage hash).
+generation:
+  tag: qwen3vl32b
+  model: Qwen3-VL-32B-Instruct
+  served_model: qwen3-vl-32b
+  serve:
+    root: serve             # replica state dir, relative to the working directory
+    tp: 2
+    gpus: [0, 1]
+    port_base: 8301
+    max_len: 24576
+features:
+  encoder_tag: null         # derived from the model dir + pixel budget (see base.yaml)
+  min_pixels: null
+  max_pixels: null

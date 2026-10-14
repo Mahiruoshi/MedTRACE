@@ -1,0 +1,6 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+# shell scripts keep LF on every checkout (bash rejects CRLF); figures are binary
+*.sh text eol=lf
+*.pdf binary
+*.png binary

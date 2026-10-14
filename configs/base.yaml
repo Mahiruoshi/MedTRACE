@@ -1,0 +1,98 @@
+# MedTRACE method defaults. Every config inherits this file through `_base_`, then a
+# generator profile (configs/gen/*.yaml). Seeds and prompt texts are NOT here: they come
+# from the environment JSON named by $MEDTRACE_ENV (template: env/medtrace.env.json).
+#
+# Stage-relevant keys enter each stage's config_hash (medtrace.pipeline.stages.stage_config),
+# together with the task texts of the environment JSON the stage reads, the run's master seed
+# and the manifest's sha256; operational keys (URLs, concurrency, GPU ids, paths) do not, so a
+# run can move between cards or replicas without invalidating its outputs.
+
+exp: medtrace               # run root: <runs_root>/<exp>/<generation.tag>/<variant>/seed<S>/ (S = master seed)
+
+# ---- dataset ----------------------------------------------------------------
+manifest: null              # dataset manifest JSON (README.md, "Datasets"); task type and modality come from it
+split: test                 # evaluation split of the manifest
+pids: null                  # optional subset of the split (smoke runs): a list, or a comma-separated string
+strict_cohort: true         # frame count on disk must equal the manifest's n_frames (when given)
+
+# ---- seeds ------------------------------------------------------------------
+seed_list: inference       # which seed list of the environment JSON this run draws its master seed from
+                            # (`inference` for Step 1-3 runs, `pool` for PRM training pools)
+seed_index: 0               # this run's master seed = seeds.<seed_list>[seed_index]
+plugins: []                 # modules imported before any stage; they may register mappings, scorers,
+                            # selectors and generators (the framework's extension point)
+
+# ---- filesystem (null = MEDTRACE_* environment variable or ./<name>) --------
+paths:
+  image_root: null
+  models_root: null
+  weights_root: null
+  cache_root: null
+  runs_root: null
+
+# ---- Step 1: evidence distillation (eq:ot_frame_align, eq:ot_relevance) -----
+features:
+  encoder_tag: null         # feature-cache dir under <cache_root>/features/; null = derived from
+                            # generation.model and the pixel budget (medtrace.features.extract_vlm)
+  min_pixels: null          # pixel budget of the extraction; null = the checkpoint's preprocessor
+  max_pixels: null          #   config, which is also what vLLM uses in Step 2
+calib:                      # the unlabeled calibration set T_OT is fitted on: patients of the TRAIN split
+  n_patients: 16            # "small unlabeled calibration subset", drawn with seed stage `calib`
+  max_frames: null          # optional, dataset-specific outlier filter: patients with more frames are
+                            # skipped (e.g. concatenated series); null = no cap. signals.json records
+                            # the largest patient's share of the calibration frames (a warning on
+                            # stderr above 0.5). Reproducing a run made with a frame cap requires
+                            # setting calib.max_frames to that cap.
+distill:
+  variant: ot_embed         # T_OT o Pi_rnd with D_text = instr + pca (inference); `ada` = training pool
+  m: 5                      # M'
+  tau_r: 0.1                # relevance temperature of the gates
+  alpha_min: 0.1
+  alpha_max: 1.0
+variant_defs: {}            # inline variants: {name: {base: <preset>, scorer: {params}, selector: {params}}};
+                            # parameters of the base preset's own scorer / selector only (no chain,
+                            # no other component), e.g. {ada: {base: ada, selector: {rho: 0.8}}}
+
+# ---- Step 2: candidate CoT (eq:temperature, eq:vlm_sampling) ---------------
+generation:
+  tag: qwen25vl3b           # run-dir component and generation-cache namespace
+  model: Qwen2.5-VL-3B-Instruct   # under paths.models_root; also names the feature cache
+  served_model: qwen2.5-vl-3b     # --served-model-name AND scripts/serve_vllm.sh --name
+  backend: vllm             # GENERATORS registry name; another backend (registered by a plugin)
+                            # tags its outputs <tag>-<backend>
+  base_urls: []             # vLLM replicas, e.g. [http://127.0.0.1:8401] (no /v1); [] = the live
+                            # replicas serve_vllm.sh registered under <serve.root>/<served_model>
+  ready_timeout: 60
+  timeout: 900
+  retries: 3
+  backend_args: {}
+  n: 12                     # N generated; reports use the first 5/8/12 (report.n_list)
+  temperature: 0.7          # tau_s; pure temperature sampling, hence
+  top_p: 1.0                #   no nucleus
+  top_k: -1                 #   and no top-k
+  max_tokens: 1536
+  repetition_penalty: 1.0
+  concurrency: 64
+  cache: true               # identical request -> identical result file (<cache_root>/gen/<tag>/)
+  serve:                    # scripts/serve_vllm.sh arguments (scripts/run_serve.sh <config> start)
+    root: serve             # relative to the working directory
+    tp: 1
+    gpus: [0]
+    port_base: 8401
+    max_len: 24576
+
+# ---- Step 3: trajectory arbitration (eq:prm_score_def, eq:agg_def, eq:best_of_n)
+# V_phi = medtrace.prm.internvl.PRMScorer with the training input layout (train_matched) and
+# the placeholder '+' in every step slot, as in training; Best-of-N ranks by A = log_sum (eq:agg_def).
+prm:
+  model: InternVL3-1B       # PRM backbone, under paths.models_root
+  weights: null             # trained PRM checkpoint (python -m medtrace.train fit), under paths.weights_root
+  tag: null                 # <prm_tag>; null = weights name
+  max_tiles: null           # null = the layout's default
+  max_images: null
+  allow_untrained: false    # a missing checkpoint is a hard error
+  batch_size: 1             # sequences per forward; 1 is bitwise reproducible
+
+# ---- metrics ----------------------------------------------------------------
+report:
+  n_list: [5, 8, 12]        # first-N sub-pools of the N candidates

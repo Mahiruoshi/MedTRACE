@@ -1,0 +1,20 @@
+# Binary task: Steps 1-3 on the test split of data/binary/manifest.json (task_type: binary;
+# README.md, "Datasets"), the method's Step-1 variant (ot_embed), N = 12 candidates, reports at
+# N = 5 / 8 / 12. The environment JSON ($MEDTRACE_ENV) carries the seeds and prompt texts, with
+# prompts.answer_labels = [negative, positive].
+#
+#   export MEDTRACE_ENV=env/medtrace.env.json         # filled: seeds.inference, prompts.*
+#   (feature cache of G first: python -m medtrace.features.extract_vlm)
+#   bash scripts/run_serve.sh configs/binary.yaml start && bash scripts/run_serve.sh configs/binary.yaml wait
+#   python -m medtrace distill  --config configs/binary.yaml --set seed_index=0
+#   python -m medtrace generate --config configs/binary.yaml --set seed_index=0
+#   bash scripts/run_serve.sh configs/binary.yaml stop
+#   python -m medtrace score    --config configs/binary.yaml --set seed_index=0 prm.weights=<checkpoint>
+#   python -m medtrace report   --config configs/binary.yaml --set seed_index=0 prm.weights=<checkpoint>
+#
+# Another generator: replace the profile in `_base_` (configs/gen/*.yaml); its PRM must be trained
+# on pools of the same generator (configs/train/pool.yaml --set manifest=data/binary/manifest.json exp=train_pool_binary).
+_base_: [base.yaml, gen/qwen25vl3b.yaml]
+
+exp: binary
+manifest: data/binary/manifest.json

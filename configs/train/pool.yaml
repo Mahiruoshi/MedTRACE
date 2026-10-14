@@ -1,0 +1,41 @@
+# PRM training pool (Algorithm 1 lines 3-6): the inference pipeline over the TRAIN split with the
+# SAME generator, prompts, sampling, parser and M as the inference runs whose candidates the PRM
+# will score ("exactly as in training", Sec. 4.2.2); only KS_M differs: adaptive keyframe
+# sampling (Sec. 4.1.1) instead of top-M'. Keep the generator profile in `_base_` equal to the
+# inference config's.
+#
+# The master seed of a pool is seeds.pool[seed_index] of the environment JSON ($MEDTRACE_ENV);
+# its candidate seeds and the MC rollout seeds derive from it. One pool per entry of seeds.pool:
+#
+#   (dual-encoder cache of the train split first: python -m medtrace.features.extract_clip, BiomedCLIP)
+#   python -m medtrace distill  --config configs/train/pool.yaml --set manifest=<dataset manifest> exp=train_pool_<task> seed_index=0
+#   python -m medtrace generate --config configs/train/pool.yaml --set manifest=<dataset manifest> exp=train_pool_<task> seed_index=0
+#   (again with seed_index=1, ...)
+#
+# Variant `ada`: s_t = cos(g^V(I_t), g^T(Q_bio)) (eq:ada_relevance, Q_bio = prompts.biomarker_query;
+# scorer clip_query over the dual-encoder cache, the unique one under <cache_root>/features unless
+# pinned with variant_defs: {ada: {base: ada, scorer: {name: clip_query, encoder: <tag>}}}), then
+# the `ada` selector (focal top-M if H(pi)/log T < rho, else axial bisection) and the gates of
+# eq:alpha_default, recorded in signals.json. The pool is never scored or reported here:
+# medtrace.train (split, mc, targets, fit) consumes its candidates; the test split is never read.
+_base_: [../base.yaml, ../gen/qwen25vl3b.yaml]
+
+exp: train_pool
+manifest: null              # the dataset manifest (required; --set manifest=...)
+split: train
+pids: null
+seed_list: pool             # master seed = seeds.pool[seed_index]
+seed_index: 0
+variant_defs:
+  # rho: the paper's concentration budget (unspecified); choose it so that both ADA modes (focal
+  # and axial bisection) occur on the train profiles (H(pi)/log T per patient is in signals.json).
+  ada: {base: ada, selector: {name: ada, rho: 0.8}}
+distill:
+  variant: ada
+  m: 5                      # M = M' (as the inference runs); alpha range as base.yaml
+  tau_r: 0.01173            # BiomedCLIP's own learned temperature 1/logit_scale (1/85.23): the profile
+                            # and the gates of eq:alpha_default then use the dual encoder's calibrated
+                            # scale. At base.yaml's 0.1 a dual encoder's cosine profile is nearly flat
+                            # and ADA degenerates to axial bisection.
+generation:
+  n: 8                      # N candidates per patient (Alg. 1 line 6); same temperature/top_p/top_k/max_tokens

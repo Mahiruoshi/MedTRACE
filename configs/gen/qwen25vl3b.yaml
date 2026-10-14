@@ -1,0 +1,20 @@
+# Generator profile: Qwen2.5-VL-3B-Instruct (the paper's frozen G; base.yaml restates it).
+# 7 GB of weights: one replica per card (TP=1); list more cards in serve.gpus for more replicas.
+# A PRM is trained on the pools of one G: scoring this G's candidates with a PRM trained on
+# another G's pools is a cross-generator shift, report it as such.
+# Every generator profile sets the same keys, so stacking a profile on top of base.yaml
+# replaces the default one completely. serve.* is operational (in no stage hash).
+generation:
+  tag: qwen25vl3b
+  model: Qwen2.5-VL-3B-Instruct
+  served_model: qwen2.5-vl-3b
+  serve:
+    root: serve             # replica state dir, relative to the working directory
+    tp: 1
+    gpus: [0]
+    port_base: 8401
+    max_len: 24576
+features:
+  encoder_tag: null         # derived from the model dir + pixel budget (see base.yaml)
+  min_pixels: null
+  max_pixels: null

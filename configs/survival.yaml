@@ -1,0 +1,16 @@
+# Survival task: Steps 1-3 on the test split of data/survival/manifest.json (task_type: survival;
+# README.md, "Datasets"), scored by the C-index. The environment JSON ($MEDTRACE_ENV) carries the
+# seeds and prompt texts, with prompts.answer_labels = one stage per survival-time bin, from the
+# shortest survival (highest risk) to the longest; the bins are quantiles of the train split's
+# uncensored times (medtrace.data.tasks).
+#
+#   export MEDTRACE_ENV=<the survival task's environment JSON>
+#   python -m medtrace all --config configs/survival.yaml --set seed_index=0 prm.weights=<checkpoint>
+#   (stage by stage, serving G for generate, as in configs/binary.yaml)
+#
+# The PRM must be trained on survival pools of the same generator
+# (configs/train/pool.yaml --set manifest=data/survival/manifest.json exp=train_pool_survival).
+_base_: [base.yaml, gen/qwen25vl3b.yaml]
+
+exp: survival
+manifest: data/survival/manifest.json
